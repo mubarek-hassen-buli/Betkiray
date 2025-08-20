@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -8,12 +8,14 @@ import {
   StatusBar,
   Dimensions,
   SafeAreaView,
+  Animated,
 } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 
 const { width, height } = Dimensions.get("window");
+const HEADER_HEIGHT = height * 0.4;
 
 const propertyDetails = {
   id: 2,
@@ -33,7 +35,31 @@ const tabs = ["Details", "Features", "Reviews", "Community"];
 
 export default function PropertyDetailScreen() {
   const [selectedTab, setSelectedTab] = useState("Details");
+  const scrollY = useRef(new Animated.Value(0)).current;
   const params = useLocalSearchParams();
+
+  const headerImageStyle = {
+    transform: [
+      {
+        translateY: scrollY.interpolate({
+          inputRange: [-HEADER_HEIGHT, 0, HEADER_HEIGHT],
+          outputRange: [-HEADER_HEIGHT / 2, 0, HEADER_HEIGHT * 0.5],
+        }),
+      },
+      {
+        scale: scrollY.interpolate({
+          inputRange: [-HEADER_HEIGHT, 0, HEADER_HEIGHT],
+          outputRange: [2, 1, 1],
+        }),
+      },
+    ],
+  };
+
+  const headerControlsOpacity = scrollY.interpolate({
+    inputRange: [0, HEADER_HEIGHT / 2],
+    outputRange: [1, 0],
+    extrapolate: "clamp",
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -44,30 +70,39 @@ export default function PropertyDetailScreen() {
       />
 
       {/* Header Image */}
-      <View style={styles.imageContainer}>
+      <Animated.View style={[styles.imageContainer, headerImageStyle]}>
         <Image
           source={{ uri: propertyDetails.image }}
           style={styles.headerImage}
           contentFit="cover"
         />
+      </Animated.View>
 
-        {/* Header Controls */}
-        <View style={styles.headerControls}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#ffffff" />
-          </TouchableOpacity>
+      {/* Header Controls */}
+      <Animated.View
+        style={[styles.headerControls, { opacity: headerControlsOpacity }]}
+      >
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#ffffff" />
+        </TouchableOpacity>
 
-          <TouchableOpacity style={styles.headerButton}>
-            <Ionicons name="bookmark-outline" size={24} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
-      </View>
+        <TouchableOpacity style={styles.headerButton}>
+          <Ionicons name="bookmark-outline" size={24} color="#ffffff" />
+        </TouchableOpacity>
+      </Animated.View>
 
       {/* Content */}
-      <View style={styles.contentContainer}>
+      <Animated.ScrollView
+        style={styles.contentContainer}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
+      >
         {/* Property Info */}
         <View style={styles.propertyInfo}>
           <Text style={styles.propertyTitle}>{propertyDetails.title}</Text>
@@ -104,10 +139,7 @@ export default function PropertyDetailScreen() {
         </View>
 
         {/* Tab Content */}
-        <ScrollView
-          style={styles.tabContent}
-          showsVerticalScrollIndicator={false}
-        >
+        <View style={styles.tabContent}>
           {selectedTab === "Details" && (
             <View>
               {/* Voice Note */}
@@ -275,8 +307,8 @@ export default function PropertyDetailScreen() {
               </Text>
             </View>
           )}
-        </ScrollView>
-      </View>
+        </View>
+      </Animated.ScrollView>
 
       {/* Bottom Actions */}
       <View style={styles.bottomActions}>
@@ -300,8 +332,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   imageContainer: {
-    position: "relative",
-    height: height * 0.4,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: HEADER_HEIGHT,
+    overflow: "hidden",
   },
   headerImage: {
     width: "100%",
@@ -310,192 +346,194 @@ const styles = StyleSheet.create({
   headerControls: {
     position: "absolute",
     top: 50,
-    left: 0,
-    right: 0,
+    left: 16,
+    right: 16,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
   },
   headerButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.4)",
     alignItems: "center",
+    justifyContent: "center",
   },
   contentContainer: {
-    flex: 1,
+    marginTop: HEADER_HEIGHT,
     backgroundColor: "#ffffff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    marginTop: -20,
-    paddingTop: 20,
   },
   propertyInfo: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   propertyTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "700",
     color: "#000000",
-    marginBottom: 8,
   },
   locationRow: {
+    marginTop: 8,
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
   },
   locationText: {
-    fontSize: 16,
-    color: "#888888",
-    marginLeft: 4,
+    marginLeft: 6,
+    fontSize: 14,
+    color: "#666666",
   },
   priceRow: {
+    marginTop: 12,
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "flex-end",
   },
   price: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "700",
     color: "#000000",
   },
   period: {
-    fontSize: 16,
-    color: "#888888",
     marginLeft: 4,
+    marginBottom: 2,
+    fontSize: 14,
+    color: "#666666",
   },
   tabContainer: {
     flexDirection: "row",
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    marginTop: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
   },
   tab: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    marginRight: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginRight: 12,
+    borderRadius: 20,
+    backgroundColor: "#F5F5F5",
   },
   activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: "#000000",
+    backgroundColor: "#000000",
   },
   tabText: {
-    fontSize: 16,
-    color: "#888888",
-    fontWeight: "500",
+    fontSize: 14,
+    color: "#000000",
   },
   activeTabText: {
-    color: "#000000",
-    fontWeight: "600",
+    color: "#ffffff",
   },
   tabContent: {
-    flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   voiceNoteContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#F0F8FF",
-    padding: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
     borderRadius: 12,
-    marginTop: 20,
-    marginBottom: 20,
+    backgroundColor: "#ffffff",
   },
   voiceNoteLeft: {
     flexDirection: "row",
     alignItems: "center",
   },
   voiceNoteText: {
-    fontSize: 16,
-    color: "#007AFF",
     marginLeft: 8,
-    fontWeight: "500",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#007AFF",
   },
   playButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: "#007AFF",
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
   },
   section: {
-    marginBottom: 24,
+    marginTop: 24,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
+    fontSize: 18,
+    fontWeight: "700",
     color: "#000000",
     marginBottom: 12,
   },
   descriptionText: {
-    fontSize: 16,
-    color: "#666666",
-    lineHeight: 24,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#444444",
   },
   mapContainer: {
+    height: 160,
     borderRadius: 12,
     overflow: "hidden",
   },
   mapImage: {
     width: "100%",
-    height: 200,
+    height: "100%",
   },
   featuresContainer: {
-    paddingTop: 20,
+    marginTop: 8,
   },
   featuresGrid: {
+    marginTop: 12,
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    marginBottom: 40,
   },
   featureCard: {
     width: "48%",
-    backgroundColor: "#f8f9fa",
+    padding: 16,
     borderRadius: 12,
-    padding: 20,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    backgroundColor: "#ffffff",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   featureCardText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#000000",
     marginTop: 8,
+    fontSize: 14,
+    color: "#666666",
   },
   featureDetails: {
-    gap: 20,
+    marginTop: 12,
   },
   featureDetailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 4,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
   },
   featureDetailLabel: {
-    fontSize: 16,
-    color: "#000000",
-    fontWeight: "500",
+    color: "#666666",
   },
   featureDetailValue: {
-    fontSize: 16,
-    color: "#888888",
+    color: "#000000",
+    fontWeight: "600",
   },
   reviewsContainer: {
-    paddingTop: 20,
+    marginTop: 8,
   },
   reviewItem: {
-    marginBottom: 24,
-    paddingBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    backgroundColor: "#ffffff",
   },
   reviewHeader: {
-    marginBottom: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
   reviewerInfo: {
     flexDirection: "row",
@@ -505,98 +543,92 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#007AFF",
-    justifyContent: "center",
+    backgroundColor: "#000000",
     alignItems: "center",
+    justifyContent: "center",
     marginRight: 12,
   },
   reviewerAvatar2: {
-    backgroundColor: "#FF6B6B",
+    backgroundColor: "#007AFF",
   },
   reviewerInitial: {
     color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   reviewerName: {
-    fontSize: 16,
     fontWeight: "600",
     color: "#000000",
-    marginBottom: 4,
   },
   ratingContainer: {
     flexDirection: "row",
     alignItems: "center",
+    marginTop: 4,
   },
   starsContainer: {
     flexDirection: "row",
     marginRight: 8,
   },
   reviewTime: {
-    fontSize: 14,
     color: "#888888",
   },
   reviewText: {
-    fontSize: 16,
-    color: "#666666",
-    lineHeight: 22,
+    marginTop: 8,
+    color: "#444444",
+    lineHeight: 20,
   },
   addReviewButton: {
+    marginTop: 8,
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#E3F2FD",
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginTop: 20,
   },
   addReviewText: {
-    fontSize: 16,
+    marginLeft: 8,
     color: "#007AFF",
     fontWeight: "600",
-    marginLeft: 8,
   },
   noReviewsText: {
-    fontSize: 16,
     color: "#888888",
-    textAlign: "center",
-    paddingVertical: 40,
   },
   bottomActions: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 24,
     flexDirection: "row",
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    paddingBottom: 30,
-    gap: 12,
+    justifyContent: "space-between",
   },
   callButton: {
     flex: 1,
+    marginRight: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#000000",
-    paddingVertical: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
     borderRadius: 12,
   },
   callButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
     marginLeft: 8,
+    color: "#ffffff",
+    fontWeight: "600",
   },
   chatButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f5f5",
-    paddingVertical: 16,
+    backgroundColor: "#ffffff",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
   },
   chatButtonText: {
-    color: "#000000",
-    fontSize: 16,
-    fontWeight: "600",
     marginLeft: 8,
+    color: "#000000",
+    fontWeight: "600",
   },
 });

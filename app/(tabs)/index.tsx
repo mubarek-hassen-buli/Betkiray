@@ -307,12 +307,15 @@ export default function HomeScreen() {
         visible={locationDropdownVisible}
         animationType="fade"
         transparent={true}
+        onRequestClose={() => setLocationDropdownVisible(false)}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
-          onPress={() => setLocationDropdownVisible(false)}
+          activeOpacity={1}
+          onPressOut={() => setLocationDropdownVisible(false)}
         >
           <View style={styles.locationDropdown}>
+            <Text style={styles.dropdownTitle}>Select a City</Text>
             {cities.map((city) => (
               <TouchableOpacity
                 key={city}
@@ -323,10 +326,14 @@ export default function HomeScreen() {
                 onPress={() => {
                   setSelectedCity(city);
                   setLocationDropdownVisible(false);
-                  setSelectedCategory("All"); // Reset category when changing city
+                  setSelectedCategory("All");
                 }}
               >
-                <Ionicons name="location-outline" size={18} color="#888888" />
+                <Ionicons
+                  name="location-outline"
+                  size={20}
+                  color={selectedCity === city ? "#FF3B30" : "#888888"}
+                />
                 <Text
                   style={[
                     styles.locationOptionText,
@@ -336,7 +343,7 @@ export default function HomeScreen() {
                   {city}
                 </Text>
                 {selectedCity === city && (
-                  <Ionicons name="checkmark" size={18} color="#000000" />
+                  <Ionicons name="checkmark-circle" size={20} color="#FF3B30" />
                 )}
               </TouchableOpacity>
             ))}
@@ -624,5 +631,52 @@ const styles = StyleSheet.create({
   searchResults: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  locationDropdown: {
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 20,
+    width: width * 0.8,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  dropdownTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 15,
+    textAlign: "center",
+    color: "#000000",
+  },
+  locationOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  selectedLocationOption: {
+    borderBottomColor: "#FF3B30",
+  },
+  locationOptionText: {
+    fontSize: 16,
+    color: "#888888",
+    marginLeft: 12,
+    flex: 1,
+  },
+  selectedLocationText: {
+    color: "#000000",
+    fontWeight: "500",
   },
 });
