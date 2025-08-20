@@ -1,97 +1,153 @@
-import React, { useState, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  StatusBar,
-  Dimensions,
-  SafeAreaView,
-  Animated,
-} from "react-native";
-import { Image } from "expo-image";
+import { useAppState } from "@/contexts/AppStateContext";
+import { getPropertyById } from "@/data/properties";
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
+import React, { useMemo, useRef, useState } from "react";
+import {
+  Animated,
+  Dimensions,
+  FlatList,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import MapView, { Marker } from "react-native-maps";
 
 const { width, height } = Dimensions.get("window");
-const HEADER_HEIGHT = height * 0.4;
-
-const propertyDetails = {
-  id: 2,
-  title: "1 Room with Attached Bathroom",
-  location: "Ayat, Addis Ababa",
-  price: "ETB 10,000",
-  period: "/month",
-  image:
-    "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=300&fit=crop",
-  description:
-    "A beautifully designed studio apartment perfect for students. Located just 5 minutes walk from Ayat Condominium with all modern amenities included. The space features high ceilings, large windows, and contemporary furnishing.",
-  mapImage:
-    "https://images.unsplash.com/photo-1524661135-423995f22d0b?w=400&h=200&fit=crop",
-};
-
-const tabs = ["Details", "Features", "Reviews", "Community"];
+const HEADER_MAX_HEIGHT = Math.round(height * 0.4);
+const HEADER_MIN_HEIGHT = 80;
+const HEADER_SCROLL_DISTANCE = HEADER_MAX_HEIGHT - HEADER_MIN_HEIGHT;
 
 export default function PropertyDetailScreen() {
-  const [selectedTab, setSelectedTab] = useState("Details");
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const propertyId = Number(id);
+  const property = useMemo(() => getPropertyById(propertyId), [propertyId]);
   const scrollY = useRef(new Animated.Value(0)).current;
-  const params = useLocalSearchParams();
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [selectedTab, setSelectedTab] = useState<
+    "Details" | "Features" | "Reviews"
+  >("Details");
+  const { isSaved, toggleSaved } = useAppState();
+  const [newReview, setNewReview] = useState("");
+  const [reviews, setReviews] = useState<
+    Array<{
+      id: string;
+      author: string;
+      text: string;
+      when: string;
+      color?: string;
+    }>
+  >([
+    {
+      id: "r1",
+      author: "Sarah M.",
+      text: "Perfect location and the landlord is very responsive. Water is always available!",
+      when: "2 days ago",
+    },
+    {
+      id: "r2",
+      author: "John D.",
+      text: "Great place for students. Very close to campus and well-maintained.",
+      when: "1 week ago",
+      color: "#007AFF",
+    },
+  ]);
 
-  const headerImageStyle = {
-    transform: [
-      {
-        translateY: scrollY.interpolate({
-          inputRange: [-HEADER_HEIGHT, 0, HEADER_HEIGHT],
-          outputRange: [-HEADER_HEIGHT / 2, 0, HEADER_HEIGHT * 0.5],
-        }),
-      },
-      {
-        scale: scrollY.interpolate({
-          inputRange: [-HEADER_HEIGHT, 0, HEADER_HEIGHT],
-          outputRange: [2, 1, 1],
-        }),
-      },
-    ],
-  };
+  if (!property) {
+    return (
+      <View style={styles.missingContainer}>
+        <Text style={styles.missingText}>Property not found.</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Text style={styles.backBtnText}>Go back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
-  const headerControlsOpacity = scrollY.interpolate({
-    inputRange: [0, HEADER_HEIGHT / 2],
-    outputRange: [1, 0],
+  const headerHeight = scrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE],
+    outputRange: [HEADER_MAX_HEIGHT, HEADER_MIN_HEIGHT],
+    extrapolate: "clamp",
+  });
+
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE],
+    outputRange: [0, -HEADER_SCROLL_DISTANCE],
     extrapolate: "clamp",
   });
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar
         barStyle="light-content"
-        backgroundColor="transparent"
         translucent
+        backgroundColor="transparent"
       />
 
-      {/* Header Image */}
-      <Animated.View style={[styles.imageContainer, headerImageStyle]}>
-        <Image
-          source={{ uri: propertyDetails.image }}
-          style={styles.headerImage}
-          contentFit="cover"
-        />
-      </Animated.View>
-
-      {/* Header Controls */}
+      {/* Parallax Header with Carousel */}
       <Animated.View
-        style={[styles.headerControls, { opacity: headerControlsOpacity }]}
+        style={[
+          styles.header,
+          {
+            height: headerHeight,
+            transform: [{ translateY: headerTranslateY }],
+          },
+        ]}
       >
-        <TouchableOpacity
-          style={styles.headerButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#ffffff" />
-        </TouchableOpacity>
+        <FlatList
+          data={property.images}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(uri, idx) => `${uri}-${idx}`}
+          onMomentumScrollEnd={(e) => {
+            const index = Math.round(e.nativeEvent.contentOffset.x / width);
+            setActiveImageIndex(index);
+          }}
+          renderItem={({ item: uri }) => (
+            <View style={styles.carouselSlide}>
+              <Image
+                source={{ uri }}
+                style={styles.headerImage}
+                contentFit="cover"
+              />
+            </View>
+          )}
+        />
 
-        <TouchableOpacity style={styles.headerButton}>
-          <Ionicons name="bookmark-outline" size={24} color="#ffffff" />
-        </TouchableOpacity>
+        {/* Carousel Indicators */}
+        <View style={styles.carouselIndicators}>
+          {property.images.map((_, i) => (
+            <View
+              key={i}
+              style={[styles.dot, i === activeImageIndex && styles.activeDot]}
+            />
+          ))}
+        </View>
+
+        {/* Top controls */}
+        <View style={styles.headerControls}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#ffffff" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => toggleSaved(property.id)}
+          >
+            <Ionicons
+              name={isSaved(property.id) ? "bookmark" : "bookmark-outline"}
+              size={24}
+              color="#ffffff"
+            />
+          </TouchableOpacity>
+        </View>
       </Animated.View>
 
       {/* Content */}
@@ -99,28 +155,26 @@ export default function PropertyDetailScreen() {
         style={styles.contentContainer}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
+          { useNativeDriver: false }
         )}
         scrollEventThrottle={16}
       >
         {/* Property Info */}
         <View style={styles.propertyInfo}>
-          <Text style={styles.propertyTitle}>{propertyDetails.title}</Text>
-
+          <Text style={styles.propertyTitle}>{property.title}</Text>
           <View style={styles.locationRow}>
             <Ionicons name="location-outline" size={16} color="#FF3B30" />
-            <Text style={styles.locationText}>{propertyDetails.location}</Text>
+            <Text style={styles.locationText}>{property.location}</Text>
           </View>
-
           <View style={styles.priceRow}>
-            <Text style={styles.price}>{propertyDetails.price}</Text>
-            <Text style={styles.period}>{propertyDetails.period}</Text>
+            <Text style={styles.price}>{property.price}</Text>
+            <Text style={styles.period}>{property.period}</Text>
           </View>
         </View>
 
-        {/* Tab Navigation */}
+        {/* Tabs */}
         <View style={styles.tabContainer}>
-          {tabs.map((tab) => (
+          {(["Details", "Features", "Reviews"] as const).map((tab) => (
             <TouchableOpacity
               key={tab}
               style={[styles.tab, selectedTab === tab && styles.activeTab]}
@@ -154,22 +208,37 @@ export default function PropertyDetailScreen() {
               </TouchableOpacity>
 
               {/* Description */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Description</Text>
-                <Text style={styles.descriptionText}>
-                  {propertyDetails.description}
-                </Text>
-              </View>
+              {property.description ? (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Description</Text>
+                  <Text style={styles.descriptionText}>
+                    {property.description}
+                  </Text>
+                </View>
+              ) : null}
 
-              {/* Location */}
+              {/* Interactive Map */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Location</Text>
                 <View style={styles.mapContainer}>
-                  <Image
-                    source={{ uri: propertyDetails.mapImage }}
-                    style={styles.mapImage}
-                    contentFit="cover"
-                  />
+                  <MapView
+                    style={StyleSheet.absoluteFill}
+                    initialRegion={{
+                      latitude: property.coords.lat,
+                      longitude: property.coords.lng,
+                      latitudeDelta: 0.01,
+                      longitudeDelta: 0.01,
+                    }}
+                  >
+                    <Marker
+                      coordinate={{
+                        latitude: property.coords.lat,
+                        longitude: property.coords.lng,
+                      }}
+                      title={property.title}
+                      description={property.location}
+                    />
+                  </MapView>
                 </View>
               </View>
             </View>
@@ -206,12 +275,10 @@ export default function PropertyDetailScreen() {
                   <Text style={styles.featureDetailLabel}>Water Hours</Text>
                   <Text style={styles.featureDetailValue}>24/7 Available</Text>
                 </View>
-
                 <View style={styles.featureDetailRow}>
                   <Text style={styles.featureDetailLabel}>Campus Distance</Text>
                   <Text style={styles.featureDetailValue}>5 min walk</Text>
                 </View>
-
                 <View style={styles.featureDetailRow}>
                   <Text style={styles.featureDetailLabel}>WiFi Speed</Text>
                   <Text style={styles.featureDetailValue}>50 Mbps</Text>
@@ -222,92 +289,86 @@ export default function PropertyDetailScreen() {
 
           {selectedTab === "Reviews" && (
             <View style={styles.reviewsContainer}>
-              {/* Review Item 1 */}
-              <View style={styles.reviewItem}>
-                <View style={styles.reviewHeader}>
-                  <View style={styles.reviewerInfo}>
-                    <View style={styles.reviewerAvatar}>
-                      <Text style={styles.reviewerInitial}>S</Text>
-                    </View>
-                    <View>
-                      <Text style={styles.reviewerName}>Sarah M.</Text>
-                      <View style={styles.ratingContainer}>
-                        <View style={styles.starsContainer}>
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <Ionicons
-                              key={star}
-                              name="star"
-                              size={16}
-                              color="#FFD700"
-                            />
-                          ))}
+              {reviews.map((r, idx) => (
+                <View key={r.id} style={styles.reviewItem}>
+                  <View style={styles.reviewHeader}>
+                    <View style={styles.reviewerInfo}>
+                      <View
+                        style={[
+                          styles.reviewerAvatar,
+                          idx === 1 && styles.reviewerAvatar2,
+                          r.color ? { backgroundColor: r.color } : null,
+                        ]}
+                      >
+                        <Text style={styles.reviewerInitial}>
+                          {r.author.charAt(0)}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={styles.reviewerName}>{r.author}</Text>
+                        <View style={styles.ratingContainer}>
+                          <View style={styles.starsContainer}>
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Ionicons
+                                key={star}
+                                name={
+                                  idx === 1 && star === 5
+                                    ? "star-outline"
+                                    : "star"
+                                }
+                                size={16}
+                                color="#FFD700"
+                              />
+                            ))}
+                          </View>
+                          <Text style={styles.reviewTime}>{r.when}</Text>
                         </View>
-                        <Text style={styles.reviewTime}>2 days ago</Text>
                       </View>
                     </View>
                   </View>
+                  <Text style={styles.reviewText}>{r.text}</Text>
                 </View>
-                <Text style={styles.reviewText}>
-                  Perfect location and the landlord is very responsive. Water is
-                  always available!
-                </Text>
-              </View>
+              ))}
 
-              {/* Review Item 2 */}
-              <View style={styles.reviewItem}>
-                <View style={styles.reviewHeader}>
-                  <View style={styles.reviewerInfo}>
-                    <View
-                      style={[styles.reviewerAvatar, styles.reviewerAvatar2]}
-                    >
-                      <Text style={styles.reviewerInitial}>J</Text>
-                    </View>
-                    <View>
-                      <Text style={styles.reviewerName}>John D.</Text>
-                      <View style={styles.ratingContainer}>
-                        <View style={styles.starsContainer}>
-                          {[1, 2, 3, 4].map((star) => (
-                            <Ionicons
-                              key={star}
-                              name="star"
-                              size={16}
-                              color="#FFD700"
-                            />
-                          ))}
-                          <Ionicons
-                            name="star-outline"
-                            size={16}
-                            color="#FFD700"
-                          />
-                        </View>
-                        <Text style={styles.reviewTime}>1 week ago</Text>
-                      </View>
-                    </View>
-                  </View>
+              {/* Add Review Input */}
+              <View style={styles.addReviewContainer}>
+                <View style={styles.addReviewInputWrapper}>
+                  <Ionicons name="chatbubble-outline" size={18} color="#888" />
+                  <TextInput
+                    style={styles.newReviewInput}
+                    placeholder="Add a review..."
+                    value={newReview}
+                    onChangeText={setNewReview}
+                    multiline
+                    numberOfLines={3}
+                  />
                 </View>
-                <Text style={styles.reviewText}>
-                  Great place for students. Very close to campus and
-                  well-maintained.
-                </Text>
+                <TouchableOpacity
+                  style={styles.submitReviewButton}
+                  onPress={() => {
+                    const text = newReview.trim();
+                    if (!text) return;
+                    setReviews((prev) => [
+                      {
+                        id: `r${Date.now()}`,
+                        author: "You",
+                        text,
+                        when: "Just now",
+                        color: "#000",
+                      },
+                      ...prev,
+                    ]);
+                    setNewReview("");
+                  }}
+                >
+                  <Text style={styles.submitReviewText}>Post</Text>
+                </TouchableOpacity>
               </View>
-
-              {/* Add Review Button */}
-              <TouchableOpacity style={styles.addReviewButton}>
-                <Ionicons name="add" size={20} color="#007AFF" />
-                <Text style={styles.addReviewText}>Add Review</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {selectedTab === "Community" && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Community</Text>
-              <Text style={styles.noReviewsText}>
-                Community features coming soon
-              </Text>
             </View>
           )}
         </View>
+
+        <View style={{ height: 120 }} />
       </Animated.ScrollView>
 
       {/* Bottom Actions */}
@@ -322,7 +383,7 @@ export default function PropertyDetailScreen() {
           <Text style={styles.chatButtonText}>Chat</Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -331,13 +392,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#ffffff",
   },
-  imageContainer: {
+  missingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    padding: 24,
+  },
+  missingText: {
+    fontSize: 16,
+    color: "#444444",
+    marginBottom: 12,
+  },
+  backBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#000000",
+  },
+  backBtnText: {
+    color: "#ffffff",
+    fontWeight: "600",
+  },
+  header: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: HEADER_HEIGHT,
+    backgroundColor: "#000000",
     overflow: "hidden",
+    zIndex: 100,
+    elevation: 10,
+  },
+  carouselSlide: {
+    width,
+    height: HEADER_MAX_HEIGHT,
   },
   headerImage: {
     width: "100%",
@@ -345,7 +434,7 @@ const styles = StyleSheet.create({
   },
   headerControls: {
     position: "absolute",
-    top: 50,
+    top: StatusBar.currentHeight ? StatusBar.currentHeight + 8 : 48,
     left: 16,
     right: 16,
     flexDirection: "row",
@@ -360,8 +449,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  carouselIndicators: {
+    position: "absolute",
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.5)",
+  },
+  activeDot: {
+    backgroundColor: "#ffffff",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
   contentContainer: {
-    marginTop: HEADER_HEIGHT,
+    marginTop: HEADER_MAX_HEIGHT,
     backgroundColor: "#ffffff",
   },
   propertyInfo: {
@@ -399,6 +510,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666666",
   },
+  // Tabs
   tabContainer: {
     flexDirection: "row",
     paddingHorizontal: 16,
@@ -427,6 +539,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
+  // Details tab
   voiceNoteContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -457,6 +570,7 @@ const styles = StyleSheet.create({
   },
   section: {
     marginTop: 24,
+    paddingHorizontal: 0,
   },
   sectionTitle: {
     fontSize: 18,
@@ -470,14 +584,12 @@ const styles = StyleSheet.create({
     color: "#444444",
   },
   mapContainer: {
-    height: 160,
+    height: 200,
     borderRadius: 12,
     overflow: "hidden",
+    backgroundColor: "#F0F0F0",
   },
-  mapImage: {
-    width: "100%",
-    height: "100%",
-  },
+  // Features tab
   featuresContainer: {
     marginTop: 8,
   },
@@ -519,6 +631,7 @@ const styles = StyleSheet.create({
     color: "#000000",
     fontWeight: "600",
   },
+  // Reviews tab
   reviewsContainer: {
     marginTop: 8,
   },
@@ -587,9 +700,6 @@ const styles = StyleSheet.create({
     color: "#007AFF",
     fontWeight: "600",
   },
-  noReviewsText: {
-    color: "#888888",
-  },
   bottomActions: {
     position: "absolute",
     left: 16,
@@ -597,10 +707,10 @@ const styles = StyleSheet.create({
     bottom: 24,
     flexDirection: "row",
     justifyContent: "space-between",
+    gap: 12,
   },
   callButton: {
     flex: 1,
-    marginRight: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -629,6 +739,40 @@ const styles = StyleSheet.create({
   chatButtonText: {
     marginLeft: 8,
     color: "#000000",
+    fontWeight: "600",
+  },
+  addReviewContainer: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  addReviewInputWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+  },
+  newReviewInput: {
+    flex: 1,
+    paddingVertical: 0,
+    fontSize: 14,
+    color: "#000",
+  },
+  submitReviewButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#000",
+  },
+  submitReviewText: {
+    color: "#fff",
     fontWeight: "600",
   },
 });

@@ -1,212 +1,37 @@
-import React, { useState, useMemo } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  StatusBar,
-  Dimensions,
-  TextInput,
-  Modal,
-} from "react-native";
-import { Image } from "expo-image";
+import { useAppState } from "@/contexts/AppStateContext";
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { router } from "expo-router";
+import React, { useMemo, useState } from "react";
+import {
+  Dimensions,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 const { width } = Dimensions.get("window");
 
-const allPropertyData = {
-  "Addis Ababa": [
-    {
-      id: 1,
-      title: "Luxury 2BHK Apartment",
-      location: "CMC, Addis Ababa",
-      price: "ETB 20,000",
-      period: "/month",
-      bedrooms: "2-bed",
-      area: "100 m²",
-      type: "Apartment",
-      city: "Addis Ababa",
-      image:
-        "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=400&h=300&fit=crop",
-    },
-    {
-      id: 2,
-      title: "1 Room with Attached Bathroom",
-      location: "Ayat, Addis Ababa",
-      price: "ETB 10,000",
-      period: "/month",
-      bedrooms: "Bathroom",
-      area: "16 m²",
-      type: "House",
-      city: "Addis Ababa",
-      image:
-        "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=300&fit=crop",
-    },
-    {
-      id: 3,
-      title: "Cozy Studio Apartment",
-      location: "CMC, Addis Ababa",
-      price: "ETB 18,000",
-      period: "/month",
-      bedrooms: "Studio",
-      area: "24 m²",
-      type: "Apartment",
-      city: "Addis Ababa",
-      image:
-        "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&h=300&fit=crop",
-    },
-    {
-      id: 4,
-      title: "Modern Office Space",
-      location: "Bole, Addis Ababa",
-      price: "ETB 25,000",
-      period: "/month",
-      bedrooms: "Office",
-      area: "50 m²",
-      type: "Office",
-      city: "Addis Ababa",
-      image:
-        "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&h=300&fit=crop",
-    },
-    {
-      id: 9,
-      title: "Family House with Garden",
-      location: "Sarbet, Addis Ababa",
-      price: "ETB 35,000",
-      period: "/month",
-      bedrooms: "3-bed",
-      area: "150 m²",
-      type: "House",
-      city: "Addis Ababa",
-      image:
-        "https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=400&h=300&fit=crop",
-    },
-  ],
-  Nairobi: [
-    {
-      id: 5,
-      title: "Modern 3BR House",
-      location: "Westlands, Nairobi",
-      price: "KES 45,000",
-      period: "/month",
-      bedrooms: "3-bed",
-      area: "120 m²",
-      type: "House",
-      city: "Nairobi",
-      image:
-        "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400&h=300&fit=crop",
-    },
-    {
-      id: 6,
-      title: "Executive Apartment",
-      location: "Karen, Nairobi",
-      price: "KES 35,000",
-      period: "/month",
-      bedrooms: "2-bed",
-      area: "85 m²",
-      type: "Apartment",
-      city: "Nairobi",
-      image:
-        "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&h=300&fit=crop",
-    },
-    {
-      id: 10,
-      title: "Corporate Office Suite",
-      location: "Upper Hill, Nairobi",
-      price: "KES 60,000",
-      period: "/month",
-      bedrooms: "Office",
-      area: "100 m²",
-      type: "Office",
-      city: "Nairobi",
-      image:
-        "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=400&h=300&fit=crop",
-    },
-    {
-      id: 11,
-      title: "Penthouse Apartment",
-      location: "Kilimani, Nairobi",
-      price: "KES 55,000",
-      period: "/month",
-      bedrooms: "3-bed",
-      area: "140 m²",
-      type: "Apartment",
-      city: "Nairobi",
-      image:
-        "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=400&h=300&fit=crop",
-    },
-  ],
-  Lagos: [
-    {
-      id: 7,
-      title: "Luxury Villa",
-      location: "Victoria Island, Lagos",
-      price: "₦ 150,000",
-      period: "/month",
-      bedrooms: "4-bed",
-      area: "200 m²",
-      type: "House",
-      city: "Lagos",
-      image:
-        "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=400&h=300&fit=crop",
-    },
-    {
-      id: 8,
-      title: "Business Office",
-      location: "Ikeja, Lagos",
-      price: "₦ 80,000",
-      period: "/month",
-      bedrooms: "Office",
-      area: "75 m²",
-      type: "Office",
-      city: "Lagos",
-      image:
-        "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=400&h=300&fit=crop",
-    },
-    {
-      id: 12,
-      title: "Waterfront Apartment",
-      location: "Lekki, Lagos",
-      price: "₦ 120,000",
-      period: "/month",
-      bedrooms: "2-bed",
-      area: "90 m²",
-      type: "Apartment",
-      city: "Lagos",
-      image:
-        "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&h=300&fit=crop",
-    },
-    {
-      id: 13,
-      title: "Suburban Family Home",
-      location: "Ajah, Lagos",
-      price: "₦ 95,000",
-      period: "/month",
-      bedrooms: "3-bed",
-      area: "180 m²",
-      type: "House",
-      city: "Lagos",
-      image:
-        "https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=400&h=300&fit=crop",
-    },
-  ],
-};
+const cities = ["Addis Ababa", "Nairobi", "Lagos"] as const;
 
-const cities = ["Addis Ababa", "Nairobi", "Lagos"];
-
-const categories = ["All", "House", "Apartment", "Office"];
+const categories = ["All", "House", "Apartment", "Office"] as const;
 
 export default function HomeScreen() {
+  const { propertiesByCity } = useAppState();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCity, setSelectedCity] = useState("Addis Ababa");
+  const [selectedCity, setSelectedCity] =
+    useState<(typeof cities)[number]>("Addis Ababa");
   const [locationDropdownVisible, setLocationDropdownVisible] = useState(false);
 
   // Get properties for selected city
-  const cityProperties = allPropertyData[selectedCity] || [];
+  const cityProperties = propertiesByCity[selectedCity] || [];
 
   // Filter properties based on category and search
   const filteredProperties = useMemo(() => {
@@ -235,12 +60,7 @@ export default function HomeScreen() {
     <TouchableOpacity
       key={property.id}
       style={styles.propertyCard}
-      onPress={() =>
-        router.push({
-          pathname: "/property-detail",
-          params: { id: property.id },
-        })
-      }
+      onPress={() => router.push(`/property/${property.id}`)}
     >
       <View style={styles.imageContainer}>
         <Image
@@ -329,22 +149,7 @@ export default function HomeScreen() {
                   setSelectedCategory("All");
                 }}
               >
-                <Ionicons
-                  name="location-outline"
-                  size={20}
-                  color={selectedCity === city ? "#FF3B30" : "#888888"}
-                />
-                <Text
-                  style={[
-                    styles.locationOptionText,
-                    selectedCity === city && styles.selectedLocationText,
-                  ]}
-                >
-                  {city}
-                </Text>
-                {selectedCity === city && (
-                  <Ionicons name="checkmark-circle" size={20} color="#FF3B30" />
-                )}
+                <Text style={styles.locationOptionText}>{city}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -356,6 +161,7 @@ export default function HomeScreen() {
         visible={searchVisible}
         animationType="slide"
         presentationStyle="pageSheet"
+        onRequestClose={() => setSearchVisible(false)}
       >
         <View style={styles.searchModal}>
           <View style={styles.searchHeader}>
@@ -386,7 +192,25 @@ export default function HomeScreen() {
           </View>
 
           <ScrollView style={styles.searchResults}>
-            {filteredProperties.map(renderPropertyCard)}
+            {filteredProperties.length === 0 ? (
+              <Text>No results.</Text>
+            ) : (
+              filteredProperties.map((p) => (
+                <TouchableOpacity
+                  key={p.id}
+                  style={{ paddingVertical: 12 }}
+                  onPress={() => {
+                    setSearchVisible(false);
+                    router.push(`/property/${p.id}`);
+                  }}
+                >
+                  <Text style={{ fontWeight: "600", color: "#000" }}>
+                    {p.title}
+                  </Text>
+                  <Text style={{ color: "#666" }}>{p.location}</Text>
+                </TouchableOpacity>
+              ))
+            )}
           </ScrollView>
         </View>
       </Modal>
@@ -664,7 +488,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderBottomColor: "f0f0f0",
   },
   selectedLocationOption: {
     borderBottomColor: "#FF3B30",
