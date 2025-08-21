@@ -22,7 +22,7 @@ const cities = ["Addis Ababa", "Nairobi", "Lagos"] as const;
 const categories = ["All", "House", "Apartment", "Office"] as const;
 
 export default function HomeScreen() {
-  const { propertiesByCity } = useAppState();
+  const { propertiesByCity, isSaved, toggleSaved } = useAppState();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -71,6 +71,19 @@ export default function HomeScreen() {
         <View style={styles.typeBadge}>
           <Text style={styles.typeText}>{property.type}</Text>
         </View>
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            toggleSaved(property.id);
+          }}
+        >
+          <Ionicons
+            name={isSaved(property.id) ? "heart" : "heart-outline"}
+            size={20}
+            color={isSaved(property.id) ? "#FF3B30" : "#ffffff"}
+          />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.propertyInfo}>
@@ -248,6 +261,7 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.propertyList}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.propertyListContent}
       >
         {filteredProperties.map(renderPropertyCard)}
         <View style={styles.bottomSpacing} />
@@ -310,7 +324,10 @@ const styles = StyleSheet.create({
   },
   propertyList: {
     flex: 1,
+  },
+  propertyListContent: {
     paddingHorizontal: 20,
+    paddingBottom: 100,
   },
   propertyCard: {
     backgroundColor: "#ffffff",
@@ -361,6 +378,17 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 12,
     fontWeight: "500",
+  },
+  saveButton: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
   },
   propertyInfo: {
     padding: 16,

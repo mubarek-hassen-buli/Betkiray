@@ -23,7 +23,10 @@ export default function SavedScreen() {
           <Text style={styles.emptyText}>No saved properties yet</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.list}>
+        <ScrollView
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+        >
           {saved.map((p) => (
             <TouchableOpacity
               key={p.id}
@@ -37,7 +40,20 @@ export default function SavedScreen() {
               />
               <View style={styles.info}>
                 <Text style={styles.title}>{p.title}</Text>
-                <Text style={styles.location}>{p.location}</Text>
+                <View style={styles.locationRow}>
+                  <Ionicons name="location-outline" size={14} color="#FF3B30" />
+                  <Text style={styles.location}>{p.location}</Text>
+                </View>
+                <View style={styles.detailsRow}>
+                  <View style={styles.detailItem}>
+                    <Ionicons name="bed-outline" size={14} color="#888888" />
+                    <Text style={styles.detailText}>{p.bedrooms}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Ionicons name="resize-outline" size={14} color="#888888" />
+                    <Text style={styles.detailText}>{p.area}</Text>
+                  </View>
+                </View>
                 <View style={styles.row}>
                   <Text style={styles.price}>{p.price}</Text>
                   <Text style={styles.period}>{p.period}</Text>
@@ -45,12 +61,16 @@ export default function SavedScreen() {
               </View>
               <TouchableOpacity
                 style={styles.unbookmark}
-                onPress={() => toggleSaved(p.id)}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  toggleSaved(p.id);
+                }}
               >
-                <Ionicons name="bookmark" size={22} color="#FF3B30" />
+                <Ionicons name="heart" size={20} color="#FF3B30" />
               </TouchableOpacity>
             </TouchableOpacity>
           ))}
+          <View style={styles.bottomSpacing} />
         </ScrollView>
       )}
     </View>
@@ -61,6 +81,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#ffffff",
+    paddingTop: 50,
   },
   emptyState: {
     flex: 1,
@@ -73,53 +94,95 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   list: {
-    padding: 16,
-    gap: 16,
+    padding: 20,
+    paddingBottom: 100,
   },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
     overflow: "hidden",
     position: "relative",
   },
   image: {
-    height: 160,
+    height: 200,
     width: "100%",
   },
   info: {
-    padding: 12,
+    padding: 16,
   },
   title: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
-    color: "#000",
+    color: "#000000",
+    marginBottom: 8,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
   },
   location: {
-    marginTop: 4,
-    color: "#666",
+    fontSize: 14,
+    color: "#888888",
+    marginLeft: 4,
+  },
+  detailsRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  detailItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 20,
+  },
+  detailText: {
+    fontSize: 14,
+    color: "#888888",
+    marginLeft: 4,
   },
   row: {
-    marginTop: 8,
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 6,
+    justifyContent: "space-between",
   },
   price: {
+    fontSize: 20,
     fontWeight: "700",
-    color: "#000",
+    color: "#000000",
   },
   period: {
-    color: "#666",
+    fontSize: 14,
+    color: "#888888",
   },
   unbookmark: {
     position: "absolute",
     right: 12,
     top: 12,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    width: 32,
-    height: 32,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    borderRadius: 20,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  bottomSpacing: {
+    height: 20,
   },
 });

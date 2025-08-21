@@ -275,14 +275,14 @@ export default function AddScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={styles.keyboardContainer}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
         style={styles.container}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={styles.scrollContent}
       >
         {step === 1 && (
           <>
@@ -768,15 +768,21 @@ export default function AddScreen() {
 }
 
 const styles = StyleSheet.create({
+  keyboardContainer: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
   container: {
     flex: 1,
     backgroundColor: "#ffffff",
+  },
+  scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 36,
-    paddingBottom: 20,
+    paddingBottom: 120,
   },
   stepContainer: {
-    paddingBottom: 100, // Extra space for navigation
+    paddingBottom: 40,
   },
   stepBarWrap: {
     marginBottom: 12,

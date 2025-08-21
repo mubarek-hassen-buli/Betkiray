@@ -17,6 +17,43 @@ const { width, height } = Dimensions.get("window");
 export default function SignInScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const handleSignIn = () => {
+    let isValid = true;
+
+    // Reset errors
+    setEmailError("");
+    setPasswordError("");
+
+    // Validate email
+    if (!email.trim()) {
+      setEmailError("Email is required");
+      isValid = false;
+    } else if (!validateEmail(email)) {
+      setEmailError("Please enter a valid email address");
+      isValid = false;
+    }
+
+    // Validate password
+    if (!password.trim()) {
+      setPasswordError("Password is required");
+      isValid = false;
+    } else if (password.length < 6) {
+      setPasswordError("Password must be at least 6 characters");
+      isValid = false;
+    }
+
+    if (isValid) {
+      router.push("/(tabs)");
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -32,30 +69,40 @@ export default function SignInScreen() {
         {/* Form */}
         <View style={styles.form}>
           {/* Email Input */}
-          <View style={styles.inputContainer}>
+          <View
+            style={[styles.inputContainer, emailError && styles.inputError]}
+          >
             <Ionicons
               name="mail-outline"
               size={20}
-              color="#888888"
+              color={emailError ? "#FF3B30" : "#888888"}
               style={styles.inputIcon}
             />
             <TextInput
               style={styles.input}
-              placeholder="Email or Phone"
+              placeholder="Email"
               placeholderTextColor="#888888"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (emailError) setEmailError("");
+              }}
               keyboardType="email-address"
               autoCapitalize="none"
             />
           </View>
+          {emailError ? (
+            <Text style={styles.errorText}>{emailError}</Text>
+          ) : null}
 
           {/* Password Input */}
-          <View style={styles.inputContainer}>
+          <View
+            style={[styles.inputContainer, passwordError && styles.inputError]}
+          >
             <Ionicons
               name="lock-closed-outline"
               size={20}
-              color="#888888"
+              color={passwordError ? "#FF3B30" : "#888888"}
               style={styles.inputIcon}
             />
             <TextInput
@@ -63,10 +110,16 @@ export default function SignInScreen() {
               placeholder="Password"
               placeholderTextColor="#888888"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (passwordError) setPasswordError("");
+              }}
               secureTextEntry
             />
           </View>
+          {passwordError ? (
+            <Text style={styles.errorText}>{passwordError}</Text>
+          ) : null}
 
           {/* Forgot Password */}
           <TouchableOpacity style={styles.forgotPassword}>
@@ -74,10 +127,7 @@ export default function SignInScreen() {
           </TouchableOpacity>
 
           {/* Sign In Button */}
-          <TouchableOpacity
-            style={styles.signInButton}
-            onPress={() => router.push("/(tabs)")}
-          >
+          <TouchableOpacity style={styles.signInButton} onPress={handleSignIn}>
             <Text style={styles.signInButtonText}>Sign in</Text>
           </TouchableOpacity>
 
@@ -144,8 +194,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
-    marginBottom: 24,
+    marginBottom: 8,
     paddingBottom: 12,
+  },
+  inputError: {
+    borderBottomColor: "#FF3B30",
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#FF3B30",
+    marginBottom: 16,
+    marginLeft: 32,
   },
   inputIcon: {
     marginRight: 12,
