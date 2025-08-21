@@ -1,18 +1,25 @@
 import { useAppState } from "@/contexts/AppStateContext";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import React, { useMemo, useState } from "react";
 import {
   Alert,
   Dimensions,
+  Image,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
+import { simulatePropertyUpload, formatCurrency } from "@/utils/propertyUtils";
 
 const { width } = Dimensions.get("window");
 
@@ -22,10 +29,12 @@ export default function AddScreen() {
   const { addProperty } = useAppState();
 
   const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Step 1
   const [photos, setPhotos] = useState<string[]>([]);
   const [audioAdded, setAudioAdded] = useState(false);
+  const [imageErrors, setImageErrors] = useState<string[]>([]);
 
   // Step 2
   const [title, setTitle] = useState("");
@@ -53,39 +62,184 @@ export default function AddScreen() {
     return "/day";
   }, [billing]);
 
+  const pickImage = async () => {
+    try {
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Please grant camera roll permissions to upload images."
+        );
+        return;
+      }
+
+      if (photos.length >= 3) {
+        Alert.alert(
+          "Maximum Images Reached",
+          "You can only upload exactly 3 images. Please remove an existing image first."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+        aspect: [4, 3],
+        allowsEditing: false,
+      });
+
+      if (!result.canceled && result.assets) {
+        const newImages = result.assets.map((asset) => asset.uri);
+        const totalImages = photos.length + newImages.length;
+
+        if (totalImages > 3) {
+          const allowedCount = 3 - photos.length;
+          Alert.alert(
+            "Image Limit",
+            `You can only add ${allowedCount} more image(s). Only the first ${allowedCount} will be selected.`
+          );
+          setPhotos((prev) => [...prev, ...newImages.slice(0, allowedCount)]);
+        } else {
+          setPhotos((prev) => [...prev, ...newImages]);
+        }
+        setImageErrors([]);
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to pick images. Please try again.");
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const validateStep = (stepNumber: number): boolean => {
+    switch (stepNumber) {
+      case 1:
+        if (photos.length !== 3) {
+          setImageErrors([
+            `Please upload exactly 3 images of your property (currently ${photos.length}/3)`,
+          ]);
+          return false;
+        }
+        setImageErrors([]);
+        return true;
+      case 2:
+        if (!title.trim()) {
+          Alert.alert(
+            "Add title",
+            "Please enter a property title before continuing."
+          );
+          return false;
+        }
+        if (!description.trim()) {
+          Alert.alert(
+            "Add description",
+            "Please add a description of your property."
+          );
+          return false;
+        }
+        return true;
+      case 3:
+        if (!price.trim()) {
+          Alert.alert("Add price", "Please enter a rental price.");
+          return false;
+        }
+        if (isNaN(Number(price)) || Number(price) <= 0) {
+          Alert.alert("Invalid price", "Please enter a valid price amount.");
+          return false;
+        }
+        return true;
+      case 4:
+        if (!address.trim()) {
+          Alert.alert("Add address", "Please enter the property address.");
+          return false;
+        }
+        return true;
+      default:
+        return true;
+    }
+  };
+
   const goNext = () => {
-    if (step === 2 && !title.trim()) {
-      Alert.alert(
-        "Add title",
-        "Please enter a property title before continuing."
-      );
-      return;
-    }
-    if (step === 3 && !price.trim()) {
-      Alert.alert("Add price", "Please enter a rental price.");
-      return;
-    }
+    if (!validateStep(step)) return;
     setStep((s) => Math.min(4, s + 1));
   };
 
   const goBack = () => setStep((s) => Math.max(1, s - 1));
 
-  const postProperty = () => {
-    const id = addProperty({
-      title: title || "Untitled Property",
-      city: "Addis Ababa",
-      location: address || "Addis Ababa",
-      price: price || "ETB 0",
-      period,
-      bedrooms: `${rooms}-bed`,
-      area: "20 m²",
-      type,
-      image: photos[0] || (undefined as unknown as string),
-      images: photos,
-      coords: { lat: coords.lat, lng: coords.lng },
-      description,
-    });
-    router.replace(`/property/${id}`);
+  const postProperty = async () => {
+    if (!validateStep(4)) return;
+
+    setIsSubmitting(true);
+
+    try {
+      // Calculate area based on rooms (simple estimation)
+      const estimatedArea = rooms * 25 + baths * 5;
+
+      // Format price with currency
+      const formattedPrice = formatCurrency(price, "Addis Ababa");
+
+      const propertyData = {
+        title: title.trim(),
+        city: "Addis Ababa" as const,
+        location: address.trim(),
+        price: formattedPrice,
+        period,
+        bedrooms: rooms === 1 ? "Studio" : `${rooms}-bed`,
+        area: `${estimatedArea} m²`,
+        type,
+        image: photos[0],
+        images: photos,
+        coords: { lat: coords.lat, lng: coords.lng },
+        description: description.trim(),
+        address: address.trim(),
+      };
+
+      // Simulate property upload with validation
+      const result = await simulatePropertyUpload(propertyData);
+
+      if (!result.success) {
+        Alert.alert("Validation Error", result.message);
+        return;
+      }
+
+      const id = addProperty(propertyData);
+
+      Alert.alert(
+        "Success!",
+        "Your property has been posted successfully and is now live!",
+        [
+          {
+            text: "View Property",
+            onPress: () => router.replace(`/property-detail?id=${id}`),
+          },
+          {
+            text: "Add Another",
+            onPress: () => {
+              // Reset form
+              setStep(1);
+              setPhotos([]);
+              setTitle("");
+              setDescription("");
+              setPrice("");
+              setAddress("");
+              setAudioAdded(false);
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      Alert.alert(
+        "Upload Failed",
+        "Failed to post your property. Please check your internet connection and try again.",
+        [{ text: "Retry", onPress: postProperty }, { text: "Cancel" }]
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const StepHeader = ({
@@ -120,388 +274,496 @@ export default function AddScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      {step === 1 && (
-        <>
-          <StepHeader
-            icon="camera"
-            tint="#3772FF"
-            title="Add Photos of Your Property"
-            subtitle="Upload up to 10 high-quality photos to showcase your space"
-          />
-
-          <View style={styles.cardUpload}>
-            <TouchableOpacity
-              style={styles.uploadTap}
-              onPress={() =>
-                Alert.alert("Upload", "Connect image picker here if desired.")
-              }
-            >
-              <Ionicons name="cloud-upload-outline" size={28} color="#3772FF" />
-              <Text style={styles.uploadTitle}>Tap to upload photos</Text>
-              <Text style={styles.uploadHint}>or drag and drop</Text>
-            </TouchableOpacity>
-            <View style={styles.thumbRow}>
-              <TouchableOpacity style={styles.thumbBox}>
-                <Ionicons name="add" size={22} color="#888" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.thumbBox}>
-                <Ionicons name="add" size={22} color="#888" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.inlineCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.inlineTitle}>Add Audio (Optional)</Text>
-              <Text style={styles.inlineSubtitle}>
-                Let users hear more about your place
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.inlineButton}
-              onPress={() => {
-                setAudioAdded(true);
-                Alert.alert("Audio", "Audio file uploaded (placeholder)");
-              }}
-            >
-              <Text style={styles.inlineButtonText}>
-                {audioAdded ? "Added" : "Upload"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity style={styles.primaryButton} onPress={goNext}>
-            <Text style={styles.primaryButtonText}>Next</Text>
-          </TouchableOpacity>
-        </>
-      )}
-
-      {step === 2 && (
-        <>
-          <StepHeader
-            icon="home"
-            tint="#22A06B"
-            title="Property Details"
-            subtitle="Tell us about your amazing space"
-          />
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Property Title</Text>
-            <TextInput
-              placeholder="e.g., Cozy Downtown Apartment"
-              value={title}
-              onChangeText={setTitle}
-              style={styles.input}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        style={styles.container}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
+        {step === 1 && (
+          <>
+            <StepHeader
+              icon="camera"
+              tint="#3772FF"
+              title="Add Photos of Your Property"
+              subtitle="Upload exactly 3 high-quality photos"
             />
-          </View>
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Description</Text>
-            <TextInput
-              placeholder="Describe your property features, amenities, and what makes it special..."
-              value={description}
-              onChangeText={setDescription}
-              style={[styles.input, { height: 100, textAlignVertical: "top" }]}
-              multiline
-              maxLength={500}
-            />
-            <Text style={styles.charCount}>
-              {description.length}/500 characters
-            </Text>
-          </View>
-
-          <Text style={[styles.label, { marginTop: 8 }]}>Property Type</Text>
-          <View style={styles.typeGrid}>
-            {(
-              [
-                "House",
-                "Apartment",
-                "Office",
-                "Retail",
-                "Studio",
-                "Warehouse",
-              ] as const
-            ).map((t) => (
+            <View style={styles.cardUpload}>
               <TouchableOpacity
-                key={t}
-                style={[styles.typeChip, type === t && styles.typeChipActive]}
-                onPress={() => setType(t)}
+                style={[
+                  styles.uploadTap,
+                  photos.length >= 3 && styles.uploadTapDisabled,
+                ]}
+                onPress={pickImage}
+                disabled={photos.length >= 3}
               >
                 <Ionicons
-                  name={
-                    t === "House"
-                      ? "home"
-                      : t === "Apartment"
-                      ? "business"
-                      : t === "Office"
-                      ? "briefcase"
-                      : t === "Retail"
-                      ? "pricetag"
-                      : t === "Studio"
-                      ? "musical-notes"
-                      : "cube"
-                  }
-                  size={18}
-                  color={type === t ? "#fff" : "#555"}
+                  name="cloud-upload-outline"
+                  size={28}
+                  color={photos.length >= 3 ? "#ccc" : "#3772FF"}
                 />
                 <Text
                   style={[
-                    styles.typeChipText,
-                    type === t && styles.typeChipTextActive,
+                    styles.uploadTitle,
+                    photos.length >= 3 && styles.uploadTitleDisabled,
                   ]}
                 >
-                  {t}
+                  {photos.length >= 3
+                    ? "3 images uploaded"
+                    : "Tap to upload photos"}
+                </Text>
+                <Text
+                  style={[
+                    styles.uploadHint,
+                    photos.length >= 3 && styles.uploadHintDisabled,
+                  ]}
+                >
+                  {photos.length >= 3
+                    ? "Maximum reached"
+                    : "Select exactly 3 images"}
                 </Text>
               </TouchableOpacity>
-            ))}
-          </View>
 
-          <View style={styles.counterRow}>
-            <View style={styles.counterBox}>
-              <Text style={styles.counterLabel}>Number of Rooms</Text>
-              <View style={styles.counterControls}>
-                <TouchableOpacity
-                  style={styles.counterBtn}
-                  onPress={() => setRooms((v) => Math.max(0, v - 1))}
-                >
-                  <Ionicons name="remove" size={18} color="#000" />
-                </TouchableOpacity>
-                <Text style={styles.counterValue}>{rooms}</Text>
-                <TouchableOpacity
-                  style={styles.counterBtn}
-                  onPress={() => setRooms((v) => v + 1)}
-                >
-                  <Ionicons name="add" size={18} color="#000" />
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={styles.counterBox}>
-              <Text style={styles.counterLabel}>Bathrooms</Text>
-              <View style={styles.counterControls}>
-                <TouchableOpacity
-                  style={styles.counterBtn}
-                  onPress={() => setBaths((v) => Math.max(0, v - 1))}
-                >
-                  <Ionicons name="remove" size={18} color="#000" />
-                </TouchableOpacity>
-                <Text style={styles.counterValue}>{baths}</Text>
-                <TouchableOpacity
-                  style={styles.counterBtn}
-                  onPress={() => setBaths((v) => v + 1)}
-                >
-                  <Ionicons name="add" size={18} color="#000" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
+              {imageErrors.length > 0 && (
+                <View style={styles.errorContainer}>
+                  {imageErrors.map((error, index) => (
+                    <Text key={index} style={styles.errorText}>
+                      {error}
+                    </Text>
+                  ))}
+                </View>
+              )}
 
-          <View style={[styles.inlineCard, { alignItems: "center" }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.inlineTitle}>Furnished</Text>
-              <Text style={styles.inlineSubtitle}>
-                Is your property furnished?
+              <View style={styles.imageGrid}>
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <View key={index} style={styles.imageSlot}>
+                    {photos[index] ? (
+                      <View style={styles.imageContainer}>
+                        <Image
+                          source={{ uri: photos[index] }}
+                          style={styles.uploadedImage}
+                        />
+                        <TouchableOpacity
+                          style={styles.removeButton}
+                          onPress={() => removeImage(index)}
+                        >
+                          <Ionicons name="close" size={16} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.emptySlot}
+                        onPress={pickImage}
+                      >
+                        <Ionicons name="add" size={22} color="#888" />
+                        <Text style={styles.slotText}>Photo {index + 1}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </View>
+
+              <Text style={styles.imageCount}>
+                {photos.length}/3 images uploaded
               </Text>
             </View>
-            <Switch value={furnished} onValueChange={setFurnished} />
-          </View>
 
-          <View style={styles.navRow}>
-            <TouchableOpacity style={styles.backButton} onPress={goBack}>
-              <Ionicons name="arrow-back" size={18} color="#000" />
-              <Text style={styles.backText}>Back</Text>
-            </TouchableOpacity>
             <TouchableOpacity
-              style={styles.primaryButtonSmall}
+              style={[
+                styles.primaryButton,
+                photos.length !== 3 && styles.primaryButtonDisabled,
+              ]}
               onPress={goNext}
+              disabled={photos.length !== 3}
             >
-              <Text style={styles.primaryButtonText}>Next</Text>
+              <Text style={styles.primaryButtonText}>
+                Next ({photos.length === 3 ? "✓" : `${photos.length}/3`})
+              </Text>
             </TouchableOpacity>
-          </View>
-        </>
-      )}
+          </>
+        )}
 
-      {step === 3 && (
-        <>
-          <StepHeader
-            icon="cash"
-            tint="#16C47F"
-            title="Set Your Price"
-            subtitle="What would you like to charge?"
-          />
+        {step === 2 && (
+          <View style={styles.stepContainer}>
+            <StepHeader
+              icon="home"
+              tint="#22A06B"
+              title="Property Details"
+              subtitle="Tell us about your amazing space"
+            />
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Rental Price</Text>
-            <View style={styles.priceInputRow}>
-              <Text style={styles.currency}>$</Text>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Property Title *</Text>
               <TextInput
-                keyboardType="numeric"
-                placeholder="0"
-                value={price}
-                onChangeText={setPrice}
-                style={[styles.input, { flex: 1, marginLeft: 8 }]}
+                placeholder="e.g., Cozy Downtown Apartment"
+                value={title}
+                onChangeText={setTitle}
+                style={[styles.input, !title.trim() && styles.inputError]}
               />
             </View>
-          </View>
 
-          <Text style={[styles.label, { marginTop: 8 }]}>Billing Period</Text>
-          <View style={{ gap: 10 }}>
-            {(["Monthly", "Weekly", "Daily"] as Billing[]).map((b) => (
-              <TouchableOpacity
-                key={b}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Description *</Text>
+              <TextInput
+                placeholder="Describe your property features, amenities, and what makes it special..."
+                value={description}
+                onChangeText={setDescription}
                 style={[
-                  styles.billingRow,
-                  billing === b && styles.billingRowActive,
+                  styles.input,
+                  styles.textArea,
+                  !description.trim() && styles.inputError,
                 ]}
-                onPress={() => setBilling(b)}
-              >
-                <View
-                  style={[
-                    styles.billingIcon,
-                    billing === b && { backgroundColor: "#2F6BFF" },
-                  ]}
-                >
-                  <Ionicons
-                    name="calendar"
-                    size={18}
-                    color={billing === b ? "#fff" : "#6C6C6C"}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.billingTitle,
-                      billing === b && { color: "#0B0B0B" },
-                    ]}
-                  >
-                    {b}
-                  </Text>
-                  <Text style={styles.billingSub}>
-                    {b === "Monthly"
-                      ? "Per month"
-                      : b === "Weekly"
-                      ? "Per week"
-                      : "Per day"}
-                  </Text>
-                </View>
-                <View
-                  style={[styles.radio, billing === b && styles.radioActive]}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={[styles.noticeRow, { backgroundColor: "#FFF6E5" }]}>
-            <Ionicons name="hand-left" size={18} color="#F5A524" />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.noticeTitle}>Negotiable</Text>
-              <Text style={styles.noticeSub}>Open to price discussions</Text>
-            </View>
-            <Switch value={negotiable} onValueChange={setNegotiable} />
-          </View>
-
-          <View style={[styles.noticeRow, { backgroundColor: "#EFFFF6" }]}>
-            <Ionicons name="flash" size={18} color="#16C47F" />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.noticeTitle}>Include Utilities</Text>
-              <Text style={styles.noticeSub}>
-                Water, electricity, internet, etc.
+                multiline
+                maxLength={500}
+              />
+              <Text style={styles.charCount}>
+                {description.length}/500 characters
               </Text>
             </View>
-            <Switch
-              value={includeUtilities}
-              onValueChange={setIncludeUtilities}
+
+            <View style={styles.inlineCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inlineTitle}>Add Audio (Optional)</Text>
+                <Text style={styles.inlineSubtitle}>
+                  Let users hear more about your place
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.inlineButton}
+                onPress={() => {
+                  setAudioAdded(true);
+                  Alert.alert("Audio", "Audio file uploaded (placeholder)");
+                }}
+              >
+                <Text style={styles.inlineButtonText}>
+                  {audioAdded ? "Added" : "Upload"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.label, { marginTop: 16 }]}>Property Type</Text>
+            <View style={styles.typeGrid}>
+              {(
+                [
+                  "House",
+                  "Apartment",
+                  "Office",
+                  "Retail",
+                  "Studio",
+                  "Warehouse",
+                ] as const
+              ).map((t) => (
+                <TouchableOpacity
+                  key={t}
+                  style={[styles.typeChip, type === t && styles.typeChipActive]}
+                  onPress={() => setType(t)}
+                >
+                  <Ionicons
+                    name={
+                      t === "House"
+                        ? "home"
+                        : t === "Apartment"
+                        ? "business"
+                        : t === "Office"
+                        ? "briefcase"
+                        : t === "Retail"
+                        ? "storefront"
+                        : t === "Studio"
+                        ? "musical-notes"
+                        : "cube"
+                    }
+                    size={18}
+                    color={type === t ? "#fff" : "#555"}
+                  />
+                  <Text
+                    style={[
+                      styles.typeChipText,
+                      type === t && styles.typeChipTextActive,
+                    ]}
+                  >
+                    {t}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.counterRow}>
+              <View style={styles.counterBox}>
+                <Text style={styles.counterLabel}>Rooms</Text>
+                <View style={styles.counterControls}>
+                  <TouchableOpacity
+                    style={styles.counterBtn}
+                    onPress={() => setRooms((v) => Math.max(1, v - 1))}
+                  >
+                    <Ionicons name="remove" size={18} color="#000" />
+                  </TouchableOpacity>
+                  <Text style={styles.counterValue}>{rooms}</Text>
+                  <TouchableOpacity
+                    style={styles.counterBtn}
+                    onPress={() => setRooms((v) => v + 1)}
+                  >
+                    <Ionicons name="add" size={18} color="#000" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <View style={styles.counterBox}>
+                <Text style={styles.counterLabel}>Bathrooms</Text>
+                <View style={styles.counterControls}>
+                  <TouchableOpacity
+                    style={styles.counterBtn}
+                    onPress={() => setBaths((v) => Math.max(1, v - 1))}
+                  >
+                    <Ionicons name="remove" size={18} color="#000" />
+                  </TouchableOpacity>
+                  <Text style={styles.counterValue}>{baths}</Text>
+                  <TouchableOpacity
+                    style={styles.counterBtn}
+                    onPress={() => setBaths((v) => v + 1)}
+                  >
+                    <Ionicons name="add" size={18} color="#000" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.furnishedCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inlineTitle}>Furnished</Text>
+                <Text style={styles.inlineSubtitle}>
+                  Is your property furnished?
+                </Text>
+              </View>
+              <Switch
+                value={furnished}
+                onValueChange={setFurnished}
+                trackColor={{ false: "#E0E6EF", true: "#22A06B" }}
+                thumbColor={furnished ? "#fff" : "#f4f3f4"}
+              />
+            </View>
+
+            <View style={styles.navRow}>
+              <TouchableOpacity style={styles.backButton} onPress={goBack}>
+                <Ionicons name="arrow-back" size={18} color="#000" />
+                <Text style={styles.backText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.primaryButtonSmall}
+                onPress={goNext}
+              >
+                <Text style={styles.primaryButtonText}>Next</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {step === 3 && (
+          <View style={styles.stepContainer}>
+            <StepHeader
+              icon="cash"
+              tint="#16C47F"
+              title="Set Your Price"
+              subtitle="What would you like to charge?"
             />
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Rental Price</Text>
+              <View style={styles.priceInputRow}>
+                <Text style={styles.currency}>$</Text>
+                <TextInput
+                  keyboardType="numeric"
+                  placeholder="0"
+                  value={price}
+                  onChangeText={setPrice}
+                  style={[styles.input, { flex: 1, marginLeft: 8 }]}
+                />
+              </View>
+            </View>
+
+            <Text style={[styles.label, { marginTop: 8 }]}>Billing Period</Text>
+            <View style={{ gap: 10 }}>
+              {(["Monthly", "Weekly", "Daily"] as Billing[]).map((b) => (
+                <TouchableOpacity
+                  key={b}
+                  style={[
+                    styles.billingRow,
+                    billing === b && styles.billingRowActive,
+                  ]}
+                  onPress={() => setBilling(b)}
+                >
+                  <View
+                    style={[
+                      styles.billingIcon,
+                      billing === b && { backgroundColor: "#2F6BFF" },
+                    ]}
+                  >
+                    <Ionicons
+                      name="calendar"
+                      size={18}
+                      color={billing === b ? "#fff" : "#6C6C6C"}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.billingTitle,
+                        billing === b && { color: "#0B0B0B" },
+                      ]}
+                    >
+                      {b}
+                    </Text>
+                    <Text style={styles.billingSub}>
+                      {b === "Monthly"
+                        ? "Per month"
+                        : b === "Weekly"
+                        ? "Per week"
+                        : "Per day"}
+                    </Text>
+                  </View>
+                  <View
+                    style={[styles.radio, billing === b && styles.radioActive]}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={[styles.noticeRow, { backgroundColor: "#FFF6E5" }]}>
+              <Ionicons name="hand-left" size={18} color="#F5A524" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.noticeTitle}>Negotiable</Text>
+                <Text style={styles.noticeSub}>Open to price discussions</Text>
+              </View>
+              <Switch value={negotiable} onValueChange={setNegotiable} />
+            </View>
+
+            <View style={[styles.noticeRow, { backgroundColor: "#EFFFF6" }]}>
+              <Ionicons name="flash" size={18} color="#16C47F" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.noticeTitle}>Include Utilities</Text>
+                <Text style={styles.noticeSub}>
+                  Water, electricity, internet, etc.
+                </Text>
+              </View>
+              <Switch
+                value={includeUtilities}
+                onValueChange={setIncludeUtilities}
+              />
+            </View>
+
+            <View style={styles.summaryBox}>
+              <Text style={styles.summaryLeft}>Your listing price:</Text>
+              <Text style={styles.summaryRight}>${price || 0}</Text>
+            </View>
+
+            <View style={styles.navRow}>
+              <TouchableOpacity style={styles.backButton} onPress={goBack}>
+                <Ionicons name="arrow-back" size={18} color="#000" />
+                <Text style={styles.backText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.primaryButtonSmall}
+                onPress={goNext}
+              >
+                <Text style={styles.primaryButtonText}>Next</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+        )}
 
-          <View style={styles.summaryBox}>
-            <Text style={styles.summaryLeft}>Your listing price:</Text>
-            <Text style={styles.summaryRight}>${price || 0}</Text>
-          </View>
+        {step === 4 && (
+          <View style={styles.stepContainer}>
+            <StepHeader
+              icon="pin"
+              tint="#FF5C5C"
+              title="Location & Contact"
+              subtitle="Help renters find your property"
+            />
 
-          <View style={styles.navRow}>
-            <TouchableOpacity style={styles.backButton} onPress={goBack}>
-              <Ionicons name="arrow-back" size={18} color="#000" />
-              <Text style={styles.backText}>Back</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.primaryButtonSmall}
-              onPress={goNext}
-            >
-              <Text style={styles.primaryButtonText}>Next</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
-
-      {step === 4 && (
-        <>
-          <StepHeader
-            icon="pin"
-            tint="#FF5C5C"
-            title="Location & Contact"
-            subtitle="Help renters find your property"
-          />
-
-          <Text style={[styles.label, { marginTop: 8 }]}>
-            Property Location
-          </Text>
-          <View style={styles.mapCard}>
-            <MapView
-              style={{ flex: 1 }}
-              initialRegion={{
-                latitude: coords.lat,
-                longitude: coords.lng,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
-              }}
-              onPress={(e) =>
-                setCoords({
-                  lat: e.nativeEvent.coordinate.latitude,
-                  lng: e.nativeEvent.coordinate.longitude,
-                })
-              }
-            >
-              <Marker
-                coordinate={{ latitude: coords.lat, longitude: coords.lng }}
-                draggable
-                onDragEnd={(e) =>
+            <Text style={[styles.label, { marginTop: 8 }]}>
+              Property Location
+            </Text>
+            <View style={styles.mapCard}>
+              <MapView
+                style={styles.mapView}
+                region={{
+                  latitude: coords.lat,
+                  longitude: coords.lng,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+                onPress={(e) =>
                   setCoords({
                     lat: e.nativeEvent.coordinate.latitude,
                     lng: e.nativeEvent.coordinate.longitude,
                   })
                 }
+                showsUserLocation={true}
+                showsMyLocationButton={true}
+              >
+                <Marker
+                  coordinate={{ latitude: coords.lat, longitude: coords.lng }}
+                  draggable
+                  onDragEnd={(e) =>
+                    setCoords({
+                      lat: e.nativeEvent.coordinate.latitude,
+                      lng: e.nativeEvent.coordinate.longitude,
+                    })
+                  }
+                  title="Property Location"
+                  description="Drag to adjust location"
+                />
+              </MapView>
+            </View>
+            <Text style={[styles.hint, { marginTop: 8 }]}>
+              Tap on map or drag marker to set exact location
+            </Text>
+
+            <View
+              style={[styles.formGroup, { marginTop: 16, marginBottom: 20 }]}
+            >
+              <Text style={styles.label}>Full Address *</Text>
+              <TextInput
+                placeholder="Enter your property address"
+                value={address}
+                onChangeText={setAddress}
+                style={[styles.input, !address.trim() && styles.inputError]}
+                multiline={false}
+                returnKeyType="done"
               />
-            </MapView>
-          </View>
-          <Text style={[styles.hint, { marginTop: 8 }]}>
-            Tap and drag to adjust pin location
-          </Text>
+            </View>
 
-          <View style={[styles.formGroup, { marginTop: 8 }]}>
-            <Text style={styles.label}>Full Address</Text>
-            <TextInput
-              placeholder="Enter your property address"
-              value={address}
-              onChangeText={setAddress}
-              style={styles.input}
-            />
-          </View>
-
-          <TouchableOpacity style={styles.postButton} onPress={postProperty}>
-            <Ionicons name="home" size={18} color="#fff" />
-            <Text style={styles.postButtonText}>Post My Property</Text>
-          </TouchableOpacity>
-
-          <View style={styles.navRow}>
-            <TouchableOpacity style={styles.backButton} onPress={goBack}>
-              <Ionicons name="arrow-back" size={18} color="#000" />
-              <Text style={styles.backText}>Back</Text>
+            <TouchableOpacity
+              style={[
+                styles.postButton,
+                isSubmitting && styles.postButtonDisabled,
+              ]}
+              onPress={postProperty}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="home" size={18} color="#fff" />
+              )}
+              <Text style={styles.postButtonText}>
+                {isSubmitting ? "Posting..." : "Post My Property"}
+              </Text>
             </TouchableOpacity>
+
+            <View style={styles.navRow}>
+              <TouchableOpacity style={styles.backButton} onPress={goBack}>
+                <Ionicons name="arrow-back" size={18} color="#000" />
+                <Text style={styles.backText}>Back</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </>
-      )}
-    </View>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -511,6 +773,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     paddingHorizontal: 20,
     paddingTop: 36,
+    paddingBottom: 20,
+  },
+  stepContainer: {
+    paddingBottom: 100, // Extra space for navigation
   },
   stepBarWrap: {
     marginBottom: 12,
@@ -619,6 +885,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
+    marginBottom: 20,
+  },
+  primaryButtonDisabled: {
+    backgroundColor: "#ccc",
   },
   primaryButtonSmall: {
     backgroundColor: "#2F6BFF",
@@ -638,6 +908,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     color: "#0B0B0B",
+    fontSize: 16,
+  },
+  inputError: {
+    borderColor: "#FF5C5C",
+    backgroundColor: "#FFF5F5",
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: "top",
   },
   charCount: { alignSelf: "flex-end", color: "#9CA3AF", marginTop: 4 },
 
@@ -754,13 +1033,18 @@ const styles = StyleSheet.create({
   summaryRight: { color: "#0B0B0B", fontWeight: "700" },
 
   mapCard: {
-    height: 180,
+    height: 200,
     borderWidth: 1,
     borderColor: "#E0E6EF",
     borderRadius: 14,
     overflow: "hidden",
     backgroundColor: "#FAFBFD",
     marginTop: 8,
+  },
+  mapView: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
   },
   hint: { color: "#9CA3AF" },
 
@@ -773,6 +1057,103 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     gap: 8,
+    marginBottom: 20,
+  },
+  postButtonDisabled: {
+    backgroundColor: "#ccc",
   },
   postButtonText: { color: "#fff", fontWeight: "700" },
+
+  // Image upload styles
+  imageGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 12,
+  },
+  imageSlot: {
+    flex: 1,
+    height: 120,
+  },
+  imageContainer: {
+    position: "relative",
+    width: "100%",
+    height: "100%",
+  },
+  uploadedImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
+    backgroundColor: "#f0f0f0",
+  },
+  removeButton: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptySlot: {
+    width: "100%",
+    height: "100%",
+    borderWidth: 2,
+    borderColor: "#E0E6EF",
+    borderStyle: "dashed",
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FAFBFD",
+  },
+  slotText: {
+    color: "#888",
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  uploadTapDisabled: {
+    backgroundColor: "#F5F5F5",
+    borderColor: "#E0E0E0",
+  },
+  uploadTitleDisabled: {
+    color: "#ccc",
+  },
+  uploadHintDisabled: {
+    color: "#ccc",
+  },
+  imageCount: {
+    textAlign: "center",
+    color: "#6C6C6C",
+    marginTop: 8,
+    fontSize: 14,
+  },
+  errorContainer: {
+    backgroundColor: "#FFF5F5",
+    borderWidth: 1,
+    borderColor: "#FF5C5C",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+  },
+  errorText: {
+    color: "#FF5C5C",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+
+  // Enhanced furnished card
+  furnishedCard: {
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: "#E0E6EF",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
 });

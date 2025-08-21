@@ -6,7 +6,7 @@ export type Property = {
   period: string;
   bedrooms: string;
   area: string;
-  type: "House" | "Apartment" | "Office";
+  type: "House" | "Apartment" | "Office" | "Retail" | "Studio" | "Warehouse";
   city: "Addis Ababa" | "Nairobi" | "Lagos";
   image: string;
   images: string[];
